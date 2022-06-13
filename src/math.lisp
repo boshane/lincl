@@ -225,7 +225,6 @@
        ((eq pos rows) col)
     (setf (aref col pos 0) (aref mat pos n))))
 
-
 (defun mdup (mat)
   (loop for i from 0 below (car (array-dimensions mat))
         with new = (make-array (array-dimensions mat))
@@ -296,7 +295,17 @@
                             (compare (1+ row))))))
            (compare 0)))))
 
-;; Find the product of matrix M0 and matrix M1
+(defun row-do (row fn col)
+  (let* ((len (length row))
+         (colrow (vgen len col)))
+    (map-into row fn row colrow)))
+
+;; Apply function FN to rows starting with START-ROW in matrix M from ROW
+(defmacro mmap (m fn row &key (start-row 0))
+  `(and (eq (cols ,m) (length ,row))
+        (mapcar #'(lambda (x) (map-into x ,fn x ,row)) (nrows ,m))))
+
+;; find the product of matrix M0 and matrix M1
 (defmethod mm* ((m0 mat) (m1 mat))
   (let ((new-dimensions (conformable? m0 m1)))
     (do ((i 0 (1+ i))

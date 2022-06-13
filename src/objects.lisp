@@ -1,5 +1,3 @@
-(in-package :lincl)
-
 (defclass vec ()
   ((arr :initarg :arr :accessor arr)
    (length :accessor vec-length)
@@ -31,6 +29,15 @@
       (setf (aref row n) (aref (arr m) (+ offset n))))
     row))
 
+;; Return row number NUM displaced from matrix M
+(defmethod nrow ((m mat) num)
+  (make-array (cols m) :displaced-to (arr m) :displaced-index-offset (* (cols m) num)))
+
+(defmethod nrows ((m mat) &key (start-row 0))
+  (do* ((cur start-row (1+ cur))
+        (row-lst (list (nrow m cur)) (push (nrow m cur) row-lst)))
+       ((eq cur (- (rows m) 1)) row-lst)))
+
 (defmethod col ((m mat) num)
   (let ((col (make-array (rows m))))
     (loop for i from 0 below (rows m)
@@ -44,6 +51,11 @@
     (dotimes (n (rows m))
       (format stream "│~{~5@A~^~}   │~%" (coerce (row m n) 'list)))
     (format stream print-box-bottom #\Space)))
+
+(defmacro vgen (len item)
+  `(do* ((l ,len)
+         (lst (list ,item) (push ,item lst)))
+       ((eq (length lst) l) (coerce lst 'vector))))
 
 (defmacro v (&rest vals)
   `(vector ,@vals))
