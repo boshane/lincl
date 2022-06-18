@@ -1,3 +1,5 @@
+(in-package :lincl)
+
 (defclass vec ()
   ((arr :initarg :arr :accessor arr)
    (length :accessor vec-length)
@@ -33,16 +35,22 @@
 (defmethod nrow ((m mat) num)
   (make-array (cols m) :displaced-to (arr m) :displaced-index-offset (* (cols m) num)))
 
-(defmethod nrows ((m mat) &key (start-row 0))
+(defmethod mat-nrows ((m mat) &key (start-row 0))
   (do* ((cur start-row (1+ cur))
         (row-lst (list (nrow m cur)) (push (nrow m cur) row-lst)))
        ((eq cur (- (rows m) 1)) row-lst)))
 
+(defmethod mat-rows ((m mat) &key (start-row 0))
+  (do* ((cur start-row (1+ cur))
+        (row-lst (list (row m cur)) (push (row m cur) row-lst)))
+       ((eq cur (- (rows m) 1)) (reverse row-lst))))
+
 (defmethod col ((m mat) num)
-  (let ((col (make-array (rows m))))
-    (loop for i from 0 below (rows m)
-          do (setf (aref col i) (aref (arr m) (+ (* (cols m) i) num))))
-    col))
+  (and (<= num (cols m))
+       (let ((col (make-array (rows m))))
+         (loop for i from 0 below (rows m)
+               do (setf (aref col i) (aref (arr m) (+ (* (cols m) i) num))))
+         col)))
 
 (defmethod print-object ((m mat) stream)
   (let ((print-box-top (concatenate 'string "┌~" (write-to-string (+ (* (cols m) 5) 3)) "a┐~%"))
@@ -52,15 +60,10 @@
       (format stream "│~{~5@A~^~}   │~%" (coerce (row m n) 'list)))
     (format stream print-box-bottom #\Space)))
 
-(defmacro vgen (len item)
-  `(do* ((l ,len)
-         (lst (list ,item) (push ,item lst)))
-       ((eq (length lst) l) (coerce lst 'vector))))
+(defun vgen (len item)
+  (make-sequence 'vector len :initial-element item))
 
-(defmacro v (&rest vals)
-  `(vector ,@vals))
-
-(defun mat (dim &key (random nil) (fill nil) (transpose nil) (direct nil))
+(defun mat (dim &key (random nil) (fill nil) (identity nil) (direct nil))
   (let ((len (* (car dim) (cadr dim))))
     (make-instance 'mat :dimensions dim :arr
                    (cond
@@ -70,12 +73,12 @@
                                                                (random random)
                                                                (* (random 10) -1))) 'vector))
                      (fill
-                      (coerce (loop for i from 0 below len collect fill) 'vector))
+                      (make-sequence 'vector len :initial-element fill))
                      (direct
                       (unless (eq len (length direct))
                         (error "Specified dimensions do not equal length of supplied array."))
                       direct)
-                     (transpose
+                     (identity
                       (if (not (eq (car dim) (cadr dim)))
                           (error "Transpose matrix requires square matrix.")
                           (let ((z-mat (coerce (loop for i from 0 below len collect 0) 'vector)))
@@ -85,3 +88,6 @@
                               (setf (aref z-mat (+ count row)) 1)))))
                      (t
                       (coerce (loop for i from 0 below len collect 0) 'vector))))))
+
+(defmacro mref (m row col)
+  `(aref (arr ,m) (+ (* (rows ,m) ,row) ,col)))

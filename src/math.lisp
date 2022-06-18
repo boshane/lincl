@@ -257,17 +257,30 @@
                           (setf (aref mat i j) (aref mat i j)))))
     mat))
 
-(defun mi-n (mat fn col &key (start-row 0))
-  (let ((mat-copy (make-array (array-dimensions mat)))
-        (rows (car (array-dimensions mat)))
-        (cols (cadr (array-dimensions mat))))
-    (loop for i from 0 below rows
-          do (loop for j from 0 below cols
-                   with val = (aref mat i col)
-                   do (if (>= i start-row)
-                          (setf (aref mat-copy i j) (funcall fn (aref mat i j) val))
-                          (setf (aref mat-copy i j) (aref mat i j)))))
-    mat-copy))
+(defmethod mn/ ((m mat) n)
+  (map 'vector #'/ (arr m) (make-sequence 'vector (length (arr m)) :initial-element n)))
+
+(defmethod mn* ((m mat) n)
+  (map 'vector #'* (arr m) (make-sequence 'vector (length (arr m)) :initial-element n)))
+
+(defmethod mn+ ((m mat) n)
+  (map 'vector #'+ (arr m) (make-sequence 'vector (length (arr m)) :initial-element n)))
+
+(defmethod mn- ((m mat) n)
+  (map 'vector #'- (arr m) (make-sequence 'vector (length (arr m)) :initial-element n)))
+
+;; When dividing each column in row matrix M by column number COL, which row gives us the greatest number of whole numbers?
+(defmethod most-whole-numbers ((m mat) col &key (start-row 0))
+  (let ((total '())
+        (row-lst (mat-rows m :start-row start-row)))
+    (dotimes (n (rows m))
+      (let ((cur (nth n row-lst)))
+        (unless (zerop (elt cur col))
+          (push (cons n (map-into cur #'/ cur (vgen (length cur) (elt cur col)))) total))))
+    (sort (mapcar #'(lambda (x)
+                (cons (car x) (loop for i across (map 'vector #'integerp (cdr x)) count i)))
+            total)
+          #'> :key #'cdr)))
 
 (defun m-diff (m0 m1)
   (and (equal (array-dimensions m0) (array-dimensions m1))
@@ -322,6 +335,18 @@
           do (setf (aref (arr new) i) (* (aref (arr new) i) n)))
     new))
 
+;; Transpose matrix M
+(defmethod transpose ((m mat))
+  (do* ((n 0 (1+ n))
+        (new (make-array (length (arr m)) :initial-element 99)))
+       ((eq n (cols m)) (mat (list (cadr (dimensions m)) (car (dimensions m))) :direct new))
+    (let ((c (col m n)))
+      (dotimes (j (length c))
+        (setf (aref new (+ (* (rows m) n) j)) (aref c j))))))
+
+(defmacro concatenate-vectors (cols)
+  `(concatenate 'vector ,@cols))
+
 ;; Are the matrix dimensions D0 and D1 CONFORMABLE for matrix multiplication?
 (defmethod conformable? ((m0 mat) (m1 mat))
   (let ((d0 (dimensions m0))
@@ -331,6 +356,8 @@
       (if (eq (car d0) (cadr d1))
           (list (car d0) (cadr d1))
           (error "Matrix dimensions M0: ~A and M1: ~A are not conformable." d0 d1)))))
+
+(defmethod  )
 
 ;; Loop through all rows in matrix MAT starting with START-ROW and return a cons of the row with the most whole numbers.
 (defun em-whole? (mat &key (start-row 0))
