@@ -269,18 +269,19 @@
 (defmethod mn- ((m mat) n)
   (map 'vector #'- (arr m) (make-sequence 'vector (length (arr m)) :initial-element n)))
 
-;; When dividing each column in row matrix M by column number COL, which row gives us the greatest number of whole numbers?
-(defmethod most-whole-numbers ((m mat) col &key (start-row 0))
-  (let ((total '())
-        (row-lst (mat-rows m :start-row start-row)))
-    (dotimes (n (rows m))
-      (let ((cur (nth n row-lst)))
-        (unless (zerop (elt cur col))
-          (push (cons n (map-into cur #'/ cur (vgen (length cur) (elt cur col)))) total))))
-    (sort (mapcar #'(lambda (x)
-                (cons (car x) (loop for i across (map 'vector #'integerp (cdr x)) count i)))
-            total)
-          #'> :key #'cdr)))
+;; When every column of each row is divided by column COL within that row, which row has the greatest
+;; number of whole numbers?
+(defmethod row-whole-num ((m mat) col &key (start-row 0))
+  (loop for j across (col m col)
+        for i = (mat-rows m :start-row start-row) then (cdr i)
+        for nth = 0 then (1+ nth)
+        with top = 0
+        do (unless (zerop j)
+             (let ((len (length (remove nil (map 'vector #'(lambda (x)
+                                                             (integerp (/ x j))) (car i))))))
+               (and (> len top)
+                    (setf top nth))))
+        finally (return top)))
 
 (defun m-diff (m0 m1)
   (and (equal (array-dimensions m0) (array-dimensions m1))
@@ -295,18 +296,16 @@
   (and (eq (length vec) (length col))
        (apply #'+ (map 'list #'* vec col))))
 
-;; Are the matrices m0 and m1 equal?
-(defun mm-equal (m0 m1)
-  (let ((d0 (array-dimensions m0))
-        (d1 (array-dimensions m1)))
-    (and (equal d0 d1)
-         (labels ((compare (row)    ;; Using recursion instead of a loop so it can immediately stop. Check performance against a loop
-                    (if (eq row (- (car d0) 1))
-                        t
-                        (if (not (veq (v m0 row) (v m1 row)))
-                            nil
-                            (compare (1+ row))))))
-           (compare 0)))))
+;; Are the matrices M0 and M1 equal?
+(defmethod mm= ((m0 mat) (m1 mat))
+  (and (eq (length (arr m0)) (length (arr m1)))
+       (labels ((compare (j)
+                  (if (= (length (arr m0)) j)
+                         t
+                         (if (= (aref (arr m0) j) (aref (arr m1) j))
+                             (compare (1+ j))
+                             nil))))
+         (compare 0))))
 
 (defun row-do (row fn col)
   (let* ((len (length row))
@@ -317,6 +316,13 @@
 (defmacro mmap (m fn row &key (start-row 0))
   `(and (eq (cols ,m) (length ,row))
         (mapcar #'(lambda (x) (map-into x ,fn x ,row)) (nrows ,m))))
+
+(defmethod mm^ ((m0 mat) (m1 mat) pow)
+  (let ((res (mm* m0 m1)))
+    (dotimes (p pow)
+      (setf res (mm* m0 res))
+      (print res))
+    res))
 
 ;; find the product of matrix M0 and matrix M1
 (defmethod mm* ((m0 mat) (m1 mat))
@@ -349,15 +355,9 @@
 
 ;; Are the matrix dimensions D0 and D1 CONFORMABLE for matrix multiplication?
 (defmethod conformable? ((m0 mat) (m1 mat))
-  (let ((d0 (dimensions m0))
-        (d1 (dimensions m1)))
-  (if (eq d0 d1)
-      d0
-      (if (eq (car d0) (cadr d1))
-          (list (car d0) (cadr d1))
-          (error "Matrix dimensions M0: ~A and M1: ~A are not conformable." d0 d1)))))
-
-(defmethod  )
+  (if (eq (cols m0) (rows m1))
+      (list (rows m0) (cols m1))
+      (error "Rows in matrix M0 not equal to columns in matrix M1. Not conformable")))
 
 ;; Loop through all rows in matrix MAT starting with START-ROW and return a cons of the row with the most whole numbers.
 (defun em-whole? (mat &key (start-row 0))

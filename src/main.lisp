@@ -2,155 +2,62 @@
 
 (in-package #:lincl)
 
-(defvar *rref-tests* (make-hash-table :test 'equal))
-(defvar *two-unknowns* '("x y = 3"
-                       "2x 3y = 1"))
-(defvar *three-unknowns* '("x 4y e = 5"
-                         "3x 3y 5e = 1"
-                         "4x y 3e = 3"))
-(defvar *four-unknowns* '("3x 2y -1z 5e = 1"
-                        "2x -4y 3z e = 7"
-                        "x 8y 2z 3e = 3"
-                        "4x 3y 5z -2e = 7"))
+(defun repl ()
+  (catch :exit
+    (loop
+      (clim-debugger:with-debugger ()
+        (with-simple-restart (abort "Return to CLIM's top level.")
+          (rep))))))
 
-(defstruct rref-operation
-  matrix steplist diff)
+(define-presentation-type result () :inherit-from t)
 
-(defparameter *dummy* (make-rref-operation :matrix (make-array '(2 2) :initial-element #\-)))
 
-(define-presentation-type matrix-op ())
+(defun rep ()
+  (multiple-value-bind (command-or-form ptype)
+      (accept 'command-or-form :prompt (package-name *package*))
+    (when (presentation-subtypep ptype 'command)
+      (with-application-frame (frame)
+        (return-from rep (execute-frame-command frame command-or-form))))
+    (shiftf +++ ++ + - command-or-form)
+    (with-room-for-graphics (t :first-quadrant nil)
+      (shiftf /// // / (multiple-value-list (eval -))))
+    (shiftf *** ** * (first /))
+    (format-textual-list / (lambda (object stream)
+                             (format stream " ")
+                             (present object 'result :stream stream))
+                         :separator #\newline)
+    (terpri)))
 
-(defmacro color-diff-row (options diff-p &body body)
-  `(if ,diff-p
-       (surrounding-output-with-border ,options ,@body)
-       (progn ,@body)))
+(define-application-frame lincl-ui ()
+  ((matrix :initform (mat '(4 4) :random 10) :accessor matrix))
+  (:pane :interactor :text-style (make-text-style :fix nil :very-large)))
 
-(defun draw-matrix (mat stream &key (diff-rows nil))
-    (surrounding-output-with-border (stream :shape :rounded
-                                            :background +beige+
-                                            :shadow +grey+
-                                            :line-thickness 3)
-      (formatting-table (stream :x-spacing 20 :y-spacing 10)
-        (dotimes (i (car (array-dimensions mat)))
-          (color-diff-row (stream :shape :rounded
-                                  :background +light-goldenrod+
-                                  :outline-ink +dark-blue+
-                                  :line-dashes t)
-              (member i diff-rows)
-            (formatting-row (stream)
-              (dotimes (j (cadr (array-dimensions mat)))
-                (formatting-cell (stream)
-                  (with-text-style (stream (make-text-style :sans-serif :roman 28))
-                    (format stream "~5A" (aref mat i j))))))))))
-  (fresh-line stream))
+(define-lincl-ui-command com-inspect-result ((result 'result :gesture :select))
+  (clouseau:inspect result))
 
-(define-application-frame lincl ()
-  ((two-unknowns :initform (solve (build-matrix (parse-equations *two-unknowns*))) :accessor two-unknowns)
-   (three-unknowns :initform (solve (build-matrix (parse-equations *three-unknowns*))) :accessor three-unknowns)
-   (four-unknowns :initform (solve (build-matrix (parse-equations *four-unknowns*))) :accessor four-unknowns)
-   (selected :initform (solve (build-matrix (parse-equations *four-unknowns*))) :accessor selected)
-   (counter :initform 1 :accessor counter)
-   (dummy-lst :initform (loop for i from 0 below 20 collect *dummy*) :accessor dummy-lst))
-  (:menu-bar menubar-command-table)
-  (:pointer-documentation t)
-  (:panes
-   (output :application
-           :scroll-bars nil
-           ;:incremental-redisplay t
-           ;:display-time t
-           :display-function #'display)
-   (int :interactor))
-  (:layouts
-   (:default
-    (vertically ()
-      (7/9 output)
-      int)))
-  (:default-initargs :width 1200 :height 1600))
+(define-lincl-ui-command (com-new :name "new")
+  ((size '(completion (("4x4" 4x4) ("2x2" 2x2))
+           :value-key cadr)
+           :prompt "size"
+           :default '4x4
+           :display-default t))
+  (case size
+        (4x4 (setf (matrix *application-frame*) (mat '(4 4) :random 10)))
+        (2x2 (setf (matrix *application-frame*) (mat '(2 2) :random 10))))
+  (print (matrix *application-frame*)))
 
-(define-lincl-command (com-select-four :name t) ()
-  (setf (selected *application-frame*) (four-unknowns *application-frame*))
-  (setf (counter *application-frame*) 1)
-  (setf (dummy-lst *application-frame*) (loop for i from 0 below 20 collect *dummy*)))
 
-(define-lincl-command (com-select-three :name t) ()
-  (setf (selected *application-frame*) (three-unknowns *application-frame*))
-  (setf (counter *application-frame*) 1)
-  (setf (dummy-lst *application-frame*) (loop for i from 0 below 20 collect *dummy*)))
+(defmethod run-frame-top-level ((frame lincl-ui) &rest args)
+  (declare (ignore args))
+  (let ((*standard-input* (frame-standard-input frame))
+        (*standard-output* (frame-standard-output frame))
+        (*error-output* (frame-error-output frame))
+        (*query-io* (frame-query-io frame))
+        (*command-dispatchers* '(#\,)))
+    (unwind-protect (repl)
+      (frame-exit frame))))
 
-(define-lincl-command (com-select-two :name t) ()
-  (setf (selected *application-frame*) (two-unknowns *application-frame*))
-  (setf (counter *application-frame*) 1)
-  (setf (dummy-lst *application-frame*) (loop for i from 0 below 20 collect *dummy*)))
-
-(define-lincl-command (com-custom-sequence :name t) ()
-  (setf (selected *application-frame*)
-        (solve (build-matrix (parse-equations (multiple-value-list (custom-sequence))))))
-  (setf (counter *application-frame*) 1)
-  (setf (dummy-lst *application-frame*) (loop for i from 0 below 20 collect *dummy*))
-  (format nil "Result: ~S~%" (selected *application-frame*)))
-
-(define-lincl-command (com-step :name t) ()
-  (with-application-frame (frame)
-    (setf (nth (counter *application-frame*) (dummy-lst *application-frame*))
-          (nth (counter *application-frame*) (selected *application-frame*)))
-    (incf (counter *application-frame*))))
-
-(defun custom-sequence (&key (stream *query-io*))
-  (let ((eq1)
-        (eq2)
-        (eq3))
-    (restart-case
-        (progn
-          (accepting-values (stream)
-            (setq eq1 (accept 'string :stream stream :default "2x -3y d = 7" :prompt "Equation 1"))
-            (terpri stream)
-            (setq eq2 (accept 'string :stream stream :default "x 2y -2d = 3" :prompt "Equation 2"))
-            (terpri stream)
-            (setq eq3 (accept 'string :stream stream :default "6x -1y 5d = 5" :prompt "Equation 3"))
-            (terpri stream))))
-    (values eq1 eq2 eq3)))
-
-(make-command-table 'select-equation-command-table
-                    :errorp nil
-                    :menu '(("Four unknowns" :command com-select-four)
-                            ("Three unknowns" :command com-select-three)
-                            ("Two unknowns" :command com-select-two)))
-
-(define-command-table menubar-command-table
-    :menu (("Select equation" :menu select-equation-command-table)
-           ("Finish" :command com-finish-selection)
-           ("Custom" :command com-custom-sequence)
-           ("Step" :command com-step)))
-
-(defun display (frame pane)
-  (let* ((len (length (selected frame)))
-         (record
-           (updating-output (pane)
-             (do* ((elements (dummy-lst frame) (cdr elements))
-                   (count 0 (1+ count))
-                   (element (first (selected frame)) (first elements)))
-                  ((eq count len))
-               (updating-output (pane
-                                 :unique-id count
-                                 :id-test #'eq
-                                 :cache-value element
-                                 :cache-test #'eql)
-                 (formatting-table (pane)
-                   (formatting-row (pane)
-                     (formatting-cell (pane)
-                       (draw-matrix (rref-operation-matrix element) pane :diff-rows (rref-operation-diff element)))
-                     (formatting-cell (pane)
-                       (with-text-style (pane (make-text-style :sans-serif :roman 24))
-                         (format pane "~{~A~}~%" (rref-operation-steplist element))))))
-                 (fresh-line pane))))))
-    (force-output pane)
-    (redisplay record pane)))
-
-(defmacro doc-do (&body body)
-  `(progn (push (format nil "~A~%" (cond ((eq (car ',@body) 'swap-rows) "Swapping rows ? and ?")
-                                         ((eq (car ',@body) 'ei-n) "Dividing each column in row to bring leading 1")
-                                         ((eq (car ',@body) 'mult-and-add) "Leading 1 found, multiplying lower rows by column"))) steplist)
-          ,@body))
-
+;;(find-application-frame 'lincl-ui :width 800 :height 600)
+;;
 (defun lincl-ui ()
-  (run-frame-top-level (make-application-frame 'lincl)))
+  (run-frame-top-level (make-application-frame 'lincl-ui :width 800 :height 600)))

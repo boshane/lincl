@@ -53,11 +53,11 @@
          col)))
 
 (defmethod print-object ((m mat) stream)
-  (let ((print-box-top (concatenate 'string "┌~" (write-to-string (+ (* (cols m) 5) 3)) "a┐~%"))
-        (print-box-bottom (concatenate 'string "└~" (write-to-string (+ (* (cols m) 5) 3)) "a┘~%")))
+  (let ((print-box-top (concatenate 'string "~%┌~" (write-to-string (+ (* (cols m) 7) 3)) "a┐~%"))
+        (print-box-bottom (concatenate 'string "└~" (write-to-string (+ (* (cols m) 7) 3)) "a┘~%")))
     (format stream print-box-top #\Space)
     (dotimes (n (rows m))
-      (format stream "│~{~5@A~^~}   │~%" (coerce (row m n) 'list)))
+      (format stream "│  ~{~5,2,0f~^  ~}   │~%" (coerce (row m n) 'list)))
     (format stream print-box-bottom #\Space)))
 
 (defun vgen (len item)
